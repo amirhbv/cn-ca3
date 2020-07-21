@@ -33,7 +33,7 @@ class Node:
         self.udp_socket = socket.socket(
             family=socket.AF_INET, type=socket.SOCK_DGRAM)
         self.udp_socket.setblocking(0)
-        self.udp_socket.bind(('', port))
+        self.udp_socket.bind(self.address)
 
     def _get_new_neighbors(self):
 
@@ -53,8 +53,9 @@ class Node:
     def run(self):
         now = time.time()
         while (True):
-            # print(self.id, len(self.neighbors), len(
-            #     self.to_be_neighbors), len(self.random_strangers))
+            print(self.id, len(self.neighbors), len(
+                self.to_be_neighbors), len(self.random_strangers))
+            old_to_be_neighbors = []
             if time.time() - now > 2:
                 now = time.time()
 
@@ -66,19 +67,23 @@ class Node:
                     self.to_be_neighbors = []
                     self._get_new_neighbors()
 
-                received_packets = {}
-                # for i in range(20):
+            received_packets = {}
+            # for i in range(20):
+            try:
+                message, address = self.udp_socket.recvfrom(
+                    100)
                 try:
-                    message, address = self.udp_socket.recvfrom(
-                        100)
                     received_packets[address] = HelloPacket.from_byte_string(
                         message)
-                except Exception as e:
+                    # print(self.id, received_packets)
                     pass
+                except Exception as e:
+                    print(e)
+            except Exception as e:
+                pass
 
-                print(self.id, received_packets)
-                self._process_received_packets(
-                    old_to_be_neighbors, received_packets)
+            self._process_received_packets(
+                old_to_be_neighbors, received_packets)
 
     def _process_received_packets(self, old_to_be_neighbors, received_packets):
         for address in self.neighbors:
@@ -97,14 +102,13 @@ class Node:
                     self.random_strangers.append(address)
 
     def _send_to_address(self, address):
-        print('_send_to_address', self.id, address)
+        # print('_send_to_address', self.id, address)
         self.udp_socket.sendto(HelloPacket(
             self.id,
             self.address,
             self.neighbors,
-            node,
-            self.get_last_send_time_to(address),
-            self.get_last_receive_time_from(address),
+            self.get_last_send_time_to_address(address),
+            self.get_last_receive_time_from_address(address),
         ).get_byte_string(), address)
         self.send_times[address] = time.time()
 
@@ -113,11 +117,10 @@ class Node:
             self.id,
             self.address,
             self.neighbors,
-            node,
             self.get_last_send_time_to(node),
             self.get_last_receive_time_from(node),
         ).get_byte_string(), node.address)
-        print('_send_to', self.id, node.address, sent_bytes)
+        # print('_send_to', self.id, node.address, sent_bytes)
         self.send_times[node.address] = time.time()
 
     def get_last_send_time_to_address(self, address):
@@ -145,7 +148,6 @@ class HelloPacket:
         sender_id,
         sender_address,
         sender_neighbors,
-        receiver,
         last_packet_send_time,
         last_packet_receive_time,
     ):
@@ -178,8 +180,10 @@ class HelloPacket:
             sender_id=int(data[1]),
             sender_address=literal_eval(data[2]),
             sender_neighbors=literal_eval(data[3]),
-            last_packet_send_time=float(data[4]),
-            last_packet_receive_time=float(data[5])
+            last_packet_send_time=float(
+                data[4]) if data[4] != 'None' else None,
+            last_packet_receive_time=float(
+                data[5]) if data[5] != 'None' else None,
         )
 
 
@@ -193,7 +197,7 @@ class Network:
             self.nodes.append(
                 Node(
                     id=i,
-                    ip='localhost',
+                    ip='127.0.0.1',
                     port=Network.BASE_PORT + i,
                     number_of_neighbors=number_of_neighbors,
                 )
@@ -205,7 +209,7 @@ class Network:
         for node in self.nodes:
             Thread(target=node.run).start()
 
-        Thread(target=self.random_disabler).start()
+        # Thread(target=self.random_disabler).start()
 
     def random_disabler(self):
         disabled_nodes_indices = []
@@ -229,6 +233,6 @@ class Network:
 
 
 Network(
-    number_of_nodes=2,
-    number_of_neighbors=1,
+    number_of_nodes=6,
+    number_of_neighbors=3
 ).run()
