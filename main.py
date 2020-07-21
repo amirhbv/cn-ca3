@@ -5,7 +5,6 @@ from random import randint
 from time import sleep
 from threading import Thread
 from collections import Counter
-from dateutil.parser import parse
 from ast import literal_eval
 
 class Node:
@@ -20,16 +19,21 @@ class Node:
         self.receive_times = {}
         self.sent_packets = Counter()
         self.received_packets = Counter()
+        self.last_received_packets = {}
+        self.to_be_neighbors = []
         self.is_disabled = False
         self.network_nodes = None
 
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.udp_socket.setblocking(0)
         self.udp_socket.bind(address=self.address)
 
     def _run_receiver(self):
         while True:
             message, address = self.udp_socket.recvfrom(BUFFER_SIZE)
             self.receive_times[address] = time.time()
+            packet = HelloPacket.from_byte_string(message)
+
 
     def _run_sender(self):
         while True:
@@ -37,12 +41,40 @@ class Node:
             self._send()
 
     def run(self):
-        Thread(target=node._run_sender).start()
-        Thread(target=node._run_receiver).start()
+        while(True):
+            for nd in self.neighbors:
+                self._send_to(nd)
+            if len(self.neighbors) < self.number_of_neighbors:
+                self._get_new_neighbors()
+            received_packets = {}
+            for nd in self.network_nodes:
+                try:
+                    message, address = self.udp_socket.recvfrom(self.BUFFER_SIZE)
+                except Exception as e:
+                    print(e)
+                received_packets[address] = HelloPacket.from_byte_string(message)
+            self._process_received_packets(received_packets)
+            sleep(2)
+        
+    def _process_received_packets(self, received_packets):
+        for nd in self.neighbors:
+            if nd in received_packets.keys():
+                self.receive_times[nd] = time.time()
+                self.last_received_packets[nd] = received_packets[nd]
+        if len(self.neighbors) < self.number_of_neighbors:
+            for i, nd in enumerate(self.to_be_neighbors):
+                if nd in received_packets.keys():
+                    self.neighbors.append(self.to_be_neighbors[i])
 
     def _send_to(self, node):
         self.udp_socket.sendto(HelloPacket(
-            self, node).get_byte_string(), node.address)
+                self.id,
+                self.address,
+                self.neighbors,
+                node,
+                self.get_last_send_time_to(node),
+                self.get_last_receive_time_from(node),
+            ).get_byte_string(), node.address)
         self.send_times[node.address] = time.time()
 
     def _send(self):
@@ -72,21 +104,15 @@ class HelloPacket:
         sender_address, 
         sender_neighbors, 
         receiver, 
-        last_packet_send_time=None, 
-        last_packet_receive_time=None, 
+        last_packet_send_time, 
+        last_packet_receive_time, 
         ):
         self.packet_type = 'hello'
         self.sender_id = sender_id
         self.sender_address = sender_address
         self.sender_neighbors = sender_neighbors
-        self.last_packet_send_time = (
-                                        last_packet_send_time if last_packet_send_time 
-                                        else sender.get_last_send_time_to(receiver)
-                                     )
-        self.last_packet_receive_time = (
-                                            last_packet_receive_time if last_packet_receive_time 
-                                            else sender.get_last_receive_time_from(receiver)
-                                        )
+        self.last_packet_send_time = last_packet_send_time
+        self.last_packet_receive_time = last_packet_receive_time
 
     def get_byte_string(self):
         return ';'.join(
@@ -110,8 +136,8 @@ class HelloPacket:
             sender_id=int(data[1]),
             sender_address=literal_eval(data[2]),
             sender_neighbors=literal_eval(data[3]),
-            last_packet_send_time=parse(data[4]),
-            last_packet_receive_time=parse(data[5])
+            last_packet_send_time=float(data[4]),
+            last_packet_receive_time=float(data[5])
         )
 
 
@@ -145,7 +171,7 @@ class Network:
         turn = 0
         while True:
             sleep(10)
-            
+
             turn += 1
             if turn > 2 and len(disabled_nodes_indices) > 0:
                 self.nodes[disabled_nodes_indices.pop(0)].enable()
