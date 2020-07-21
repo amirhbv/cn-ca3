@@ -4,10 +4,12 @@ import socket
 from random import randint
 from time import sleep
 from threading import Thread
-
+from collections import Counter
+from dateutil.parser import parse
+from ast import literal_eval
 
 class Node:
-    BUFFER_SIZE = 1024
+    BUFFER_SIZE = 2048
 
     def __init__(self, id, ip, port, number_of_neighbors):
         self.id = id
@@ -16,7 +18,10 @@ class Node:
         self.neighbors = []
         self.send_times = {}
         self.receive_times = {}
+        self.sent_packets = Counter()
+        self.received_packets = Counter()
         self.is_disabled = False
+        self.network_nodes = None
 
         self.udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.udp_socket.bind(address=self.address)
@@ -61,18 +66,53 @@ class Node:
 
 
 class HelloPacket:
-    def __init__(self, sender, receiver):
+    def __init__(
+        self, 
+        sender_id, 
+        sender_address, 
+        sender_neighbors, 
+        receiver, 
+        last_packet_send_time=None, 
+        last_packet_receive_time=None, 
+        ):
         self.packet_type = 'hello'
-        self.sender_id = sender.id
-        self.sender_address = sender.address
-        self.sender_neighbors = sender.neighbors
-        self.last_packet_send_time = sender.get_last_send_time_to(receiver)
-        self.last_packet_receive_time = sender.get_last_receive_time_from(
-            receiver)
+        self.sender_id = sender_id
+        self.sender_address = sender_address
+        self.sender_neighbors = sender_neighbors
+        self.last_packet_send_time = (
+                                        last_packet_send_time if last_packet_send_time 
+                                        else sender.get_last_send_time_to(receiver)
+                                     )
+        self.last_packet_receive_time = (
+                                            last_packet_receive_time if last_packet_receive_time 
+                                            else sender.get_last_receive_time_from(receiver)
+                                        )
 
     def get_byte_string(self):
-        # TODO
-        return self.packet_type.encode()
+        return ';'.join(
+            map(
+                str, 
+                [
+                    self.packet_type,
+                    self.sender_id,
+                    self.sender_address,
+                    self.sender_neighbors,
+                    self.last_packet_send_time,
+                    self.last_packet_receive_time,
+                ],
+            )
+        ).encode()
+
+    @staticmethod
+    def from_byte_string(byte_string):
+        data = byte_string.decode().split(';')
+        return HelloPacket(
+            sender_id=int(data[1]),
+            sender_address=literal_eval(data[2]),
+            sender_neighbors=literal_eval(data[3]),
+            last_packet_send_time=parse(data[4]),
+            last_packet_receive_time=parse(data[5])
+        )
 
 
 class Network:
@@ -87,9 +127,11 @@ class Network:
                     id=i,
                     ip='127.0.0.1',
                     port=Network.BASE_PORT + i,
-                    number_of_neighbors=number_of_neighbors
+                    number_of_neighbors=number_of_neighbors,
                 )
             )
+        for i, node in enumerate(self.nodes):
+            node.network_nodes = [nd for nd in self.nodes if nd.id != i]
 
     def run(self):
         for node in self.nodes:
@@ -102,10 +144,10 @@ class Network:
 
         turn = 0
         while True:
-            turn += 1
             sleep(10)
-
-            if turn > 2 == 1 and len(disabled_nodes_indices) > 0:
+            
+            turn += 1
+            if turn > 2 and len(disabled_nodes_indices) > 0:
                 self.nodes[disabled_nodes_indices.pop(0)].enable()
 
             rand_index = randint(0, self.number_of_nodes - 1)
