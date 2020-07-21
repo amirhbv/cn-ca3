@@ -33,7 +33,7 @@ class Node:
         self.udp_socket = socket.socket(
             family=socket.AF_INET, type=socket.SOCK_DGRAM)
         self.udp_socket.setblocking(0)
-        self.udp_socket.bind(self.address)
+        self.udp_socket.bind(('', port))
 
     def _get_new_neighbors(self):
 
@@ -67,14 +67,14 @@ class Node:
                     self._get_new_neighbors()
 
                 received_packets = {}
-                for i in range(20):
-                    try:
-                        message, address = self.udp_socket.recvfrom(
-                            self.BUFFER_SIZE)
-                        received_packets[address] = HelloPacket.from_byte_string(
-                            message)
-                    except Exception as e:
-                        pass
+                # for i in range(20):
+                try:
+                    message, address = self.udp_socket.recvfrom(
+                        100)
+                    received_packets[address] = HelloPacket.from_byte_string(
+                        message)
+                except Exception as e:
+                    pass
 
                 print(self.id, received_packets)
                 self._process_received_packets(
@@ -117,7 +117,7 @@ class Node:
             self.get_last_send_time_to(node),
             self.get_last_receive_time_from(node),
         ).get_byte_string(), node.address)
-        # print('_send_to', self.id, node.address, sent_bytes)
+        print('_send_to', self.id, node.address, sent_bytes)
         self.send_times[node.address] = time.time()
 
     def get_last_send_time_to_address(self, address):
@@ -184,7 +184,7 @@ class HelloPacket:
 
 
 class Network:
-    BASE_PORT = 16000
+    BASE_PORT = 11000
 
     def __init__(self, number_of_nodes, number_of_neighbors):
         self.number_of_nodes = number_of_nodes
@@ -193,7 +193,7 @@ class Network:
             self.nodes.append(
                 Node(
                     id=i,
-                    ip='127.0.0.1',
+                    ip='localhost',
                     port=Network.BASE_PORT + i,
                     number_of_neighbors=number_of_neighbors,
                 )
@@ -229,6 +229,6 @@ class Network:
 
 
 Network(
-    number_of_nodes=6,
-    number_of_neighbors=3
+    number_of_nodes=2,
+    number_of_neighbors=1,
 ).run()
