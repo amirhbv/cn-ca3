@@ -2,7 +2,6 @@ import math
 import time
 import socket
 from random import randint
-from time import sleep
 from threading import Thread
 from collections import Counter
 from ast import literal_eval
@@ -52,33 +51,34 @@ class Node:
             self._send_to(rand_node)
 
     def run(self):
+        now = time.time()
         while (True):
             # print(self.id, len(self.neighbors), len(
             #     self.to_be_neighbors), len(self.random_strangers))
+            if time.time() - now > 2:
+                now = time.time()
 
-            for address in self.neighbors:
-                self._send_to_address(address)
+                for address in self.neighbors:
+                    self._send_to_address(address)
 
-            if len(self.neighbors) < self.number_of_neighbors:
-                old_to_be_neighbors = self.to_be_neighbors
-                self.to_be_neighbors = []
-                self._get_new_neighbors()
+                if len(self.neighbors) < self.number_of_neighbors:
+                    old_to_be_neighbors = self.to_be_neighbors
+                    self.to_be_neighbors = []
+                    self._get_new_neighbors()
 
-            received_packets = {}
-            for i in range(20):
-                try:
-                    message, address = self.udp_socket.recvfrom(
-                        self.BUFFER_SIZE)
-                    received_packets[address] = HelloPacket.from_byte_string(
-                        message)
-                except Exception as e:
-                    pass
+                received_packets = {}
+                for i in range(20):
+                    try:
+                        message, address = self.udp_socket.recvfrom(
+                            self.BUFFER_SIZE)
+                        received_packets[address] = HelloPacket.from_byte_string(
+                            message)
+                    except Exception as e:
+                        pass
 
-            print(self.id, received_packets)
-            self._process_received_packets(
-                old_to_be_neighbors, received_packets)
-
-            sleep(2)
+                print(self.id, received_packets)
+                self._process_received_packets(
+                    old_to_be_neighbors, received_packets)
 
     def _process_received_packets(self, old_to_be_neighbors, received_packets):
         for address in self.neighbors:
@@ -117,7 +117,7 @@ class Node:
             self.get_last_send_time_to(node),
             self.get_last_receive_time_from(node),
         ).get_byte_string(), node.address)
-        print('_send_to', self.id, node.address, sent_bytes)
+        # print('_send_to', self.id, node.address, sent_bytes)
         self.send_times[node.address] = time.time()
 
     def get_last_send_time_to_address(self, address):
@@ -193,7 +193,7 @@ class Network:
             self.nodes.append(
                 Node(
                     id=i,
-                    ip='localhost',
+                    ip='127.0.0.1',
                     port=Network.BASE_PORT + i,
                     number_of_neighbors=number_of_neighbors,
                 )
@@ -211,19 +211,21 @@ class Network:
         disabled_nodes_indices = []
 
         turn = 0
+        now = time.time()
         while True:
-            sleep(10)
+            if time.time() - now > 10:
+                now = time.time()
 
-            turn += 1
-            if turn > 2 and len(disabled_nodes_indices) > 0:
-                self.nodes[disabled_nodes_indices.pop(0)].enable()
+                turn += 1
+                if turn > 2 and len(disabled_nodes_indices) > 0:
+                    self.nodes[disabled_nodes_indices.pop(0)].enable()
 
-            rand_index = randint(0, self.number_of_nodes - 1)
-            while rand_index in disabled_nodes_indices:
                 rand_index = randint(0, self.number_of_nodes - 1)
+                while rand_index in disabled_nodes_indices:
+                    rand_index = randint(0, self.number_of_nodes - 1)
 
-            self.nodes[rand_index].disable()
-            disabled_nodes_indices.append(rand_index)
+                self.nodes[rand_index].disable()
+                disabled_nodes_indices.append(rand_index)
 
 
 Network(
