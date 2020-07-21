@@ -1,7 +1,7 @@
 import math
 import time
 import socket
-from random import randint
+from random import randint, choice
 from threading import Thread
 from collections import Counter
 from ast import literal_eval
@@ -29,6 +29,7 @@ class Node:
         self.to_be_neighbors = []
         self.is_disabled = False
         self.network_nodes = None
+        self.node_to_be_connected = None
 
         self.udp_socket = socket.socket(
             family=socket.AF_INET, type=socket.SOCK_DGRAM)
@@ -36,70 +37,88 @@ class Node:
         self.udp_socket.bind(self.address)
 
     def _get_new_neighbors(self):
-
-        for address in self.random_strangers:
-            self.to_be_neighbors.append(address)
-            self._send_to_address(address)
-
-        for i in range(self.number_of_neighbors - len(self.neighbors)):
+        rand_node_index = randint(0, len(self.network_nodes) - 1)
+        while self.network_nodes[rand_node_index].address in self.neighbors:
             rand_node_index = randint(0, len(self.network_nodes) - 1)
-            while self.network_nodes[rand_node_index].address in self.neighbors:
-                rand_node_index = randint(0, len(self.network_nodes) - 1)
+        self.node_to_be_connected = (self.network_nodes[rand_node_index].address, time.time())
 
-            rand_node = self.network_nodes[rand_node_index]
-            self.to_be_neighbors.append(rand_node.address)
-            self._send_to(rand_node)
 
     def run(self):
         now = time.time()
         while (True):
-            print(self.id, len(self.neighbors), len(
-                self.to_be_neighbors), len(self.random_strangers))
-            old_to_be_neighbors = []
+            for address, _time in self.receive_times:
+                if time.time() - _time > 8:
+                    if address in self.neighbors:
+                        self.neighbors.remove(address)
+                    elif address in self.to_be_neighbors:
+                        self.to_be_neighbors.remove(address)
+ 
             if time.time() - now > 2:
+                print(self.id, len(self.neighbors), len(
+                    self.to_be_neighbors), len(self.random_strangers))
+                print(self.id, self.neighbors)
                 now = time.time()
 
                 for address in self.neighbors:
                     self._send_to_address(address)
-
                 if len(self.neighbors) < self.number_of_neighbors:
-                    old_to_be_neighbors = self.to_be_neighbors
-                    self.to_be_neighbors = []
-                    self._get_new_neighbors()
+                    self._send_to_address(self.node_to_be_connected[0])
 
-            received_packets = {}
+            if (len(self.neighbors) < self.number_of_neighbors
+                and (
+                        self.node_to_be_connected is None
+                        or time.time() - self.node_to_be_connected[1] > 8
+                    )
+            ):
+                self.get_a_node_for_to_be_connected()
+
             # for i in range(20):
             try:
-                message, address = self.udp_socket.recvfrom(
-                    100)
+                message, address = self.udp_socket.recvfrom(100)
                 try:
-                    received_packets[address] = HelloPacket.from_byte_string(
-                        message)
+                    packet = HelloPacket.from_byte_string(message)
                     # print(self.id, received_packets)
+                    self._process_received_packet(packet)
                     pass
                 except Exception as e:
                     print(e)
             except Exception as e:
                 pass
 
-            self._process_received_packets(
-                old_to_be_neighbors, received_packets)
 
-    def _process_received_packets(self, old_to_be_neighbors, received_packets):
-        for address in self.neighbors:
-            if address in received_packets.keys():
-                self.receive_times[address] = time.time()
-                self.last_received_packets[address] = received_packets[address]
+            self.random_strangers = list(set(self.random_strangers))
+            self.to_be_neighbors = list(set(self.to_be_neighbors))
+    
+    def get_a_node_for_to_be_connected(self):
+        if len(self.to_be_neighbors):
+            address = choice(self.to_be_neighbors)
+        else:
+            node = choice(self.network_nodes)
+            address = node.address
+            while address in self.neighbors:
+                node = choice(self.network_nodes)
+                address = node.address
+            
+        self.node_to_be_connected = (address, time.time())
 
-        if len(self.neighbors) < self.number_of_neighbors:
-            for address in old_to_be_neighbors:
-                if address in received_packets.keys():
-                    self.neighbors.append(address)
+    def _process_received_packet(self, packet):
+        self.receive_times[packet.sender_address] = time.time()
+        self.last_received_packets[packet.sender_address] = packet
+        
+        if packet.sender_address not in self.neighbors:
+            if packet.sender_address == self.node_to_be_connected[0]:
+                self.neighbors.append(packet.sender_address)
+            self.to_be_neighbors.append(packet.sender_address)
+    
+        # if len(self.neighbors) < self.number_of_neighbors:
+        #     for address in old_to_be_neighbors:
+        #         if address in received_packets.keys():
+        #             self.neighbors.append(address)
 
-        if len(self.neighbors) < self.number_of_neighbors:
-            for address in received_packets:
-                if address not in self.neighbors:
-                    self.random_strangers.append(address)
+        # if len(self.neighbors) < self.number_of_neighbors:
+        #     for address in received_packets:
+        #         if address not in self.neighbors:
+        #             self.random_strangers.append(address)
 
     def _send_to_address(self, address):
         # print('_send_to_address', self.id, address)
