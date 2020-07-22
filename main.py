@@ -253,8 +253,12 @@ class Network:
         for node in self.nodes:
             node.stop()
         self.is_stopped = True
+        self.log()
 
-        # TODO: Log
+    def log(self):
+        final_log = {'neighbor_packets_count': {}}
+        for node in self.nodes:
+            final_log['neighbor_packets_count'][node.address] = node.get_neighbor_packets_count()
 
     def random_disabler(self):
         disabled_nodes_indices = []
@@ -280,4 +284,4 @@ class Network:
 Network(
     number_of_nodes=6,
     number_of_neighbors=3
-).run(5 * 60)
+).run(60)
