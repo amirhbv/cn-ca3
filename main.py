@@ -29,18 +29,12 @@ class Node:
         self.to_be_neighbors = []
         self.is_disabled = False
         self.network_nodes = None
-        self.node_to_be_connected = None
+        self.nodes_to_be_connected = []
 
         self.udp_socket = socket.socket(
             family=socket.AF_INET, type=socket.SOCK_DGRAM)
         self.udp_socket.setblocking(0)
         self.udp_socket.bind(self.address)
-
-    def _get_new_neighbors(self):
-        rand_node_index = randint(0, len(self.network_nodes) - 1)
-        while self.network_nodes[rand_node_index].address in self.neighbors:
-            rand_node_index = randint(0, len(self.network_nodes) - 1)
-        self.node_to_be_connected = (self.network_nodes[rand_node_index].address, time.time())
 
 
     def run(self):
@@ -56,21 +50,26 @@ class Node:
                         self.to_be_neighbors.remove(address)
  
             if time.time() - now > 2:
-                print(self.id, self.is_disabled, len(self.neighbors), self.neighbors, self.receive_times, time.time())
+                print(self.id, self.is_disabled, len(self.neighbors), self.neighbors, self.nodes_to_be_connected)
                 now = time.time()
 
                 for address in self.neighbors:
                     self._send_to_address(address)
                 if len(self.neighbors) < self.number_of_neighbors:
-                    self._send_to_address(self.node_to_be_connected[0])
+                    for i in self.nodes_to_be_connected:
+                        self._send_to_address(i[0])
+            
 
-            if (len(self.neighbors) < self.number_of_neighbors
-                and (
-                        self.node_to_be_connected is None
-                        or time.time() - self.node_to_be_connected[1] > 8
-                    )
-            ):
-                self.get_a_node_for_to_be_connected()
+            if (len(self.neighbors) < self.number_of_neighbors):
+                # print(self.id, 'going new neighbors')
+                self._get_new_neighbors()
+
+            nodes_to_remove = []
+            for i, nd in enumerate(self.nodes_to_be_connected):
+                if time.time() - nd[1] > 8:
+                    nodes_to_remove.append(nd)
+            for i in nodes_to_remove:
+                self.nodes_to_be_connected.remove(i)
 
             # for i in range(20):
             try:
@@ -85,17 +84,24 @@ class Node:
                 pass
 
     
-    def get_a_node_for_to_be_connected(self):
-        if len(self.to_be_neighbors):
-            address = choice(self.to_be_neighbors)
-        else:
-            node = choice(self.network_nodes)
-            address = node.address
-            while address in self.neighbors:
-                node = choice(self.network_nodes)
-                address = node.address
-            
-        self.node_to_be_connected = (address, time.time())
+    def _get_new_neighbors(self):
+        nds = [nd[0] for nd in self.nodes_to_be_connected]
+        remaining = self.number_of_neighbors - len(self.neighbors)
+        for i in range(remaining - len(self.nodes_to_be_connected)):
+            address = None
+            while address is None or address in self.neighbors or address in nds:
+                if len(self.to_be_neighbors):
+                    address = choice(self.to_be_neighbors)
+                    self.to_be_neighbors.remove(address)
+                else:
+                    node = choice(self.network_nodes)
+                    address = node.address
+                    while address in self.neighbors:
+                        node = choice(self.network_nodes)
+                        address = node.address
+                
+            self.nodes_to_be_connected.append((address, time.time()))
+        # print('tooo', self.nodes_to_be_connected)
 
     def _process_received_packet(self, packet):
         self.receive_times[packet.sender_address] = time.time()
@@ -103,9 +109,10 @@ class Node:
         self.received_packets[packet.sender_address] += 1
         
         if packet.sender_address not in self.neighbors:
-            if packet.sender_address == self.node_to_be_connected[0]:
+            if packet.sender_address in [nd[0] for nd in self.nodes_to_be_connected]:
                 self.neighbors.append(packet.sender_address)
-            self.to_be_neighbors.append(packet.sender_address)
+            else:
+                self.to_be_neighbors.append(packet.sender_address)
     
         # if len(self.neighbors) < self.number_of_neighbors:
         #     for address in old_to_be_neighbors:
