@@ -192,12 +192,24 @@ class Node:
             last_packet = self.last_received_packets.get(address)
             last_packet_time = self.receive_times.get(address)
             if time.time() - last_packet_time < 8:
-                for neighbor_address in last_packet.neighbors:
+                print(last_packet.sender_neighbors)
+                for neighbor_address in last_packet.sender_neighbors:
                     if last_packet.sender_address in unidirectionals[neighbor_address]:
-                        bidirectionals[neighbor_address] = last_packet.sender_address
-                        bidirectionals[last_packet.sender_address] = neighbor_address
+                        bidirectionals[neighbor_address].append(
+                            last_packet.sender_address)
+                        bidirectionals[last_packet.sender_address].append(
+                            neighbor_address)
                     else:
-                        unidirectionals[last_packet.sender_address] = neighbor_address
+                        unidirectionals[last_packet.sender_address].append(
+                            neighbor_address)
+                print(unidirectionals, bidirectionals)
+
+        for address in self.neighbors:
+            if self.address in unidirectionals[address]:
+                bidirectionals[self.address].append(address)
+                bidirectionals[address].append(self.address)
+            else:
+                unidirectionals[self.address].append(address)
 
         all_network_nodes = sorted(
             [*self.network_nodes, self], key=lambda x: x.id)
@@ -292,10 +304,11 @@ class Network:
     def log(self, duration):
         final_log = {
             node.id: {
-                'address': node.address,
+                'address': ':'.join(map(str, node.address)),
                 'neighbor_packets_count': node.get_neighbor_packets_count(),
                 'final_neighbors': node.neighbors,
-                'accessibility_ratio': {addr: dur for addr, dur in node.get_accessibility_ratio().items()},
+                'accessibility_ratio': {addr: dur / duration for addr, dur in node.get_accessibility_ratio().items()},
+                'topology': node.get_current_topology(),
             } for node in self.nodes
         }
         with open('log.json', 'w+') as f:
