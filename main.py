@@ -16,6 +16,7 @@ class Node:
 
         self.number_of_neighbors = number_of_neighbors
         self.neighbors = []
+        self.have_been_neighbors = set()
 
         self.send_times = {}
         self.receive_times = {}
@@ -112,6 +113,7 @@ class Node:
         if packet.sender_address not in self.neighbors:
             if packet.sender_address in [nd[0] for nd in self.nodes_to_be_connected]:
                 self.neighbors.append(packet.sender_address)
+                self.have_been_neighbors.add(packet.sender_address)
             else:
                 self.to_be_neighbors.append(packet.sender_address)
     
@@ -128,6 +130,7 @@ class Node:
     def _send_to_address(self, address):
         if self.is_disabled:
             return
+        self.sent_packets[address] += 1
         # print('_send_to_address', self.id, address)
         self.udp_socket.sendto(HelloPacket(
             self.id,
