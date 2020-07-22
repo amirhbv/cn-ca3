@@ -192,17 +192,46 @@ class Node:
             last_packet = self.last_received_packets.get(address)
             last_packet_time = self.receive_times.get(address)
             if time.time() - last_packet_time < 8:
-                print(last_packet.sender_neighbors)
+                print(':((((((((((', self.id, last_packet.sender_address, last_packet_time, last_packet.sender_neighbors)
+                if last_packet.sender_address in self.neighbors and self.address in last_packet.sender_neighbors:
+                    bidirectionals[self.address].append(last_packet.sender_address)
+                    bidirectionals[last_packet.sender_address].append(self.address)
+                elif last_packet.sender_address in self.neighbors:
+                    unidirectionals[self.address].append(last_packet.sender_address)
+                elif self.address in last_packet.sender_neighbors:
+                    unidirectionals[last_packet.sender_address].append(self.address)
+                
                 for neighbor_address in last_packet.sender_neighbors:
-                    if last_packet.sender_address in unidirectionals[neighbor_address]:
-                        bidirectionals[neighbor_address].append(
-                            last_packet.sender_address)
-                        bidirectionals[last_packet.sender_address].append(
-                            neighbor_address)
+                    neighbor_packet = self.last_received_packets.get(neighbor_address, None)
+                    if neighbor_packet and time.time() - self.receive_times[neighbor_address] < 8:
+                        if last_packet.sender_address in neighbor_packet.sender_neighbors:
+                            bidirectionals[last_packet.sender_address].append(neighbor_address)
+                            bidirectionals[neighbor_address].append(last_packet.sender_address)
+                        else:
+                            unidirectionals[last_packet.sender_address].append(neighbor_address)
                     else:
-                        unidirectionals[last_packet.sender_address].append(
-                            neighbor_address)
-                print(unidirectionals, bidirectionals)
+                        unidirectionals[last_packet.sender_address].append(neighbor_address)
+
+
+                    # if last_packet.sender_address in neighbors and self.address in last_packet.sender_neighbors:
+                    #     bidirectionals[self.address].append(last_packet.sender_address)
+                    #     bidirectionals[last_packet.sender_address].append(self.address)
+                    # elif last_packet.sender_address in self.neighbors:
+                    #     unidirectionals[self.address].append(last_packet.sender_address)
+                    # elif self.address in last_packet.sender_neighbors:
+                    #     unidirectionals[last_packet.sender_address].append(self.address)
+
+
+
+                    # if last_packet.sender_address in unidirectionals[neighbor_address]:
+                    #     bidirectionals[neighbor_address].append(
+                    #         last_packet.sender_address)
+                    #     bidirectionals[last_packet.sender_address].append(
+                    #         neighbor_address)
+                    # else:
+                    #     unidirectionals[last_packet.sender_address].append(
+                    #         neighbor_address)
+                # print(unidirectionals, bidirectionals)
 
         for address in self.neighbors:
             if self.address in unidirectionals[address]:
@@ -214,11 +243,10 @@ class Node:
         all_network_nodes = sorted(
             [*self.network_nodes, self], key=lambda x: x.id)
         return [
-            [
-                2 if row_node.address in bidirectionals[
-                    col_node.address] else 1 if row_node.address in unidirectionals[col_node.address] else 0
+            ' '.join([
+                '2' if row_node.address in bidirectionals[col_node.address] else '1' if row_node.address in unidirectionals[col_node.address] else '0'
                 for col_node in all_network_nodes
-            ]
+            ])
             for row_node in all_network_nodes
         ]
 
@@ -306,13 +334,14 @@ class Network:
             node.id: {
                 'address': ':'.join(map(str, node.address)),
                 'neighbor_packets_count': node.get_neighbor_packets_count(),
-                'final_neighbors': node.neighbors,
+                'final_neighbors': list(map(lambda x: ':'.join(map(str, x)), node.neighbors)),
                 'accessibility_ratio': {addr: dur / duration for addr, dur in node.get_accessibility_ratio().items()},
                 'topology': node.get_current_topology(),
             } for node in self.nodes
         }
-        with open('log.json', 'w+') as f:
-            json.dump(final_log, f)
+        for node in self.nodes:
+            with open(f'log_{node.id}.json', 'w+') as f:
+                json.dump(final_log[node.id], f)
 
     def random_disabler(self):
         disabled_nodes_indices = []
@@ -338,4 +367,4 @@ class Network:
 Network(
     number_of_nodes=6,
     number_of_neighbors=3
-).run(30)
+).run(5 * 60)
