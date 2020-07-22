@@ -46,7 +46,9 @@ class Node:
     def run(self):
         now = time.time()
         while (True):
-            for address, _time in self.receive_times:
+            if self.is_disabled:
+                continue
+            for address, _time in self.receive_times.items():
                 if time.time() - _time > 8:
                     if address in self.neighbors:
                         self.neighbors.remove(address)
@@ -54,9 +56,7 @@ class Node:
                         self.to_be_neighbors.remove(address)
  
             if time.time() - now > 2:
-                print(self.id, len(self.neighbors), len(
-                    self.to_be_neighbors), len(self.random_strangers))
-                print(self.id, self.neighbors)
+                print(self.id, self.is_disabled, len(self.neighbors), self.neighbors, self.receive_times, time.time())
                 now = time.time()
 
                 for address in self.neighbors:
@@ -74,20 +74,16 @@ class Node:
 
             # for i in range(20):
             try:
+                if randint(1,100) <= 5:
+                    continue
                 message, address = self.udp_socket.recvfrom(100)
-                try:
-                    packet = HelloPacket.from_byte_string(message)
-                    # print(self.id, received_packets)
-                    self._process_received_packet(packet)
-                    pass
-                except Exception as e:
-                    print(e)
+                packet = HelloPacket.from_byte_string(message)
+                # print(self.id, received_packets)
+                self._process_received_packet(packet)
+                pass
             except Exception as e:
                 pass
 
-
-            self.random_strangers = list(set(self.random_strangers))
-            self.to_be_neighbors = list(set(self.to_be_neighbors))
     
     def get_a_node_for_to_be_connected(self):
         if len(self.to_be_neighbors):
@@ -104,6 +100,7 @@ class Node:
     def _process_received_packet(self, packet):
         self.receive_times[packet.sender_address] = time.time()
         self.last_received_packets[packet.sender_address] = packet
+        self.received_packets[packet.sender_address] += 1
         
         if packet.sender_address not in self.neighbors:
             if packet.sender_address == self.node_to_be_connected[0]:
@@ -121,6 +118,8 @@ class Node:
         #             self.random_strangers.append(address)
 
     def _send_to_address(self, address):
+        if self.is_disabled:
+            return
         # print('_send_to_address', self.id, address)
         self.udp_socket.sendto(HelloPacket(
             self.id,
@@ -132,6 +131,8 @@ class Node:
         self.send_times[address] = time.time()
 
     def _send_to(self, node):
+        if self.is_disabled:
+            return
         sent_bytes = self.udp_socket.sendto(HelloPacket(
             self.id,
             self.address,
@@ -155,6 +156,7 @@ class Node:
         return self.receive_times.get(receiver.address, None)
 
     def disable(self):
+        print('DISABLING', self.id)
         self.is_disabled = True
 
     def enable(self):
@@ -228,7 +230,7 @@ class Network:
         for node in self.nodes:
             Thread(target=node.run).start()
 
-        # Thread(target=self.random_disabler).start()
+        Thread(target=self.random_disabler).start()
 
     def random_disabler(self):
         disabled_nodes_indices = []
