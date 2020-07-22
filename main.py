@@ -39,7 +39,7 @@ class Node:
 
     def run(self):
         now = time.time()
-        while (True):
+        while not self.is_stopped:
             if self.is_disabled:
                 continue
             for address, _time in self.receive_times.items():
@@ -48,7 +48,7 @@ class Node:
                         self.neighbors.remove(address)
                     elif address in self.to_be_neighbors:
                         self.to_be_neighbors.remove(address)
- 
+
             if time.time() - now > 2:
                 print(self.id, self.is_disabled, len(self.neighbors), self.neighbors, self.nodes_to_be_connected)
                 now = time.time()
@@ -73,7 +73,7 @@ class Node:
 
             # for i in range(20):
             try:
-                if randint(1,100) <= 5:
+                if randint(1, 100) <= 5:
                     continue
                 message, address = self.udp_socket.recvfrom(100)
                 packet = HelloPacket.from_byte_string(message)
@@ -107,7 +107,7 @@ class Node:
         self.receive_times[packet.sender_address] = time.time()
         self.last_received_packets[packet.sender_address] = packet
         self.received_packets[packet.sender_address] += 1
-        
+
         if packet.sender_address not in self.neighbors:
             if packet.sender_address in [nd[0] for nd in self.nodes_to_be_connected]:
                 self.neighbors.append(packet.sender_address)
@@ -137,19 +137,6 @@ class Node:
         ).get_byte_string(), address)
         self.send_times[address] = time.time()
 
-    def _send_to(self, node):
-        if self.is_disabled:
-            return
-        sent_bytes = self.udp_socket.sendto(HelloPacket(
-            self.id,
-            self.address,
-            self.neighbors,
-            self.get_last_send_time_to(node),
-            self.get_last_receive_time_from(node),
-        ).get_byte_string(), node.address)
-        # print('_send_to', self.id, node.address, sent_bytes)
-        self.send_times[node.address] = time.time()
-
     def get_last_send_time_to_address(self, address):
         return self.send_times.get(address, None)
 
@@ -167,7 +154,11 @@ class Node:
         self.is_disabled = True
 
     def enable(self):
+        print('ENABLING', self.id)
         self.is_disabled = False
+
+    def stop(self):
+        self.is_stopped = True
 
 
 class HelloPacket:
@@ -233,18 +224,28 @@ class Network:
         for node in self.nodes:
             node.network_nodes = [nd for nd in self.nodes if nd.id != node.id]
 
-    def run(self):
+        self.is_stopped = False
+
+    def run(self, duration):
         for node in self.nodes:
             Thread(target=node.run).start()
 
         Thread(target=self.random_disabler).start()
+
+        time.sleep(duration)
+
+        for node in self.nodes:
+            node.stop()
+        self.is_stopped = True
+
+        # TODO: Log
 
     def random_disabler(self):
         disabled_nodes_indices = []
 
         turn = 0
         now = time.time()
-        while True:
+        while not self.is_stopped:
             if time.time() - now > 10:
                 now = time.time()
 
@@ -263,4 +264,4 @@ class Network:
 Network(
     number_of_nodes=6,
     number_of_neighbors=3
-).run()
+).run(5 * 60)
