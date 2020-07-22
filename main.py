@@ -24,6 +24,9 @@ class Node:
         self.sent_packets = Counter()
         self.received_packets = Counter()
 
+        self.neighbor_duration = Counter()
+        self.neighbor_start_time = {}
+
         self.last_received_packets = {}
 
         self.random_strangers = []
@@ -48,6 +51,7 @@ class Node:
                 if time.time() - _time > 8:
                     if address in self.neighbors:
                         self.neighbors.remove(address)
+                        self.neighbor_duration[address] += time.time() - self.neighbor_start_time[address]
                     elif address in self.to_be_neighbors:
                         self.to_be_neighbors.remove(address)
 
@@ -114,6 +118,7 @@ class Node:
             if packet.sender_address in [nd[0] for nd in self.nodes_to_be_connected]:
                 self.neighbors.append(packet.sender_address)
                 self.have_been_neighbors.add(packet.sender_address)
+                self.neighbor_start_time[packet.sender_address] = time.time()
             else:
                 self.to_be_neighbors.append(packet.sender_address)
     
