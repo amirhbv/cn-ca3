@@ -28,6 +28,7 @@ class Node:
         self.random_strangers = []
         self.to_be_neighbors = []
         self.is_disabled = False
+        self.is_stopped = False
         self.network_nodes = None
         self.nodes_to_be_connected = []
 
