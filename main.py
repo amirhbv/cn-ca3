@@ -1,6 +1,7 @@
 import math
 import time
 import socket
+import json
 from random import randint, choice
 from threading import Thread
 from collections import Counter
@@ -88,6 +89,8 @@ class Node:
                 pass
             except Exception as e:
                 pass
+        for node in self.neighbors:
+            self.neighbor_duration[node] += time.time() - self.neighbor_start_time[node]
 
     
     def _get_new_neighbors(self):
@@ -133,10 +136,16 @@ class Node:
 
     def get_neighbor_packets_count(self):
         return {
-            address: {
+            ':'.join(map(str, address)): {
                 'sent_packets_count': self.sent_packets[address],
                  'received_packets_count': self.received_packets[address]
             } for address in self.have_been_neighbors
+        }
+    
+    def get_accessibility_ratio(self):
+        print(self.id, self.neighbor_duration)
+        return {
+            ':'.join(map(str, node.address)): self.neighbor_duration.get(node.address, 0) for node in self.network_nodes
         }
 
     def _send_to_address(self, address):
@@ -253,12 +262,19 @@ class Network:
         for node in self.nodes:
             node.stop()
         self.is_stopped = True
-        self.log()
+        self.log(duration)
 
-    def log(self):
-        final_log = {'neighbor_packets_count': {}}
-        for node in self.nodes:
-            final_log['neighbor_packets_count'][node.address] = node.get_neighbor_packets_count()
+    def log(self, duration):
+        final_log = {
+            node.id: {
+                'address': node.address,
+                'neighbor_packets_count': node.get_neighbor_packets_count(),
+                'final_neighbors': node.neighbors,
+                'accessibility_ratio': {addr: dur for addr, dur in node.get_accessibility_ratio().items()},
+            } for node in self.nodes
+        }
+        with open('log.json', 'w+') as f:
+            json.dump(final_log, f)
 
     def random_disabler(self):
         disabled_nodes_indices = []
@@ -284,4 +300,4 @@ class Network:
 Network(
     number_of_nodes=6,
     number_of_neighbors=3
-).run(60)
+).run(30)
