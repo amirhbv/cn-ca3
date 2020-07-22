@@ -1,10 +1,10 @@
 import math
-import time
 import socket
-from random import randint, choice
-from threading import Thread
-from collections import Counter
+import time
 from ast import literal_eval
+from collections import Counter, defaultdict
+from random import choice, randint
+from threading import Thread
 
 
 class Node:
@@ -41,7 +41,6 @@ class Node:
         self.udp_socket.setblocking(0)
         self.udp_socket.bind(self.address)
 
-
     def run(self):
         now = time.time()
         while not self.is_stopped:
@@ -51,12 +50,14 @@ class Node:
                 if time.time() - _time > 8:
                     if address in self.neighbors:
                         self.neighbors.remove(address)
-                        self.neighbor_duration[address] += time.time() - self.neighbor_start_time[address]
+                        self.neighbor_duration[address] += time.time() - \
+                            self.neighbor_start_time[address]
                     elif address in self.to_be_neighbors:
                         self.to_be_neighbors.remove(address)
 
             if time.time() - now > 2:
-                print(self.id, self.is_disabled, len(self.neighbors), self.neighbors, self.nodes_to_be_connected)
+                print(self.id, self.is_disabled, len(self.neighbors),
+                      self.neighbors, self.nodes_to_be_connected)
                 now = time.time()
 
                 for address in self.neighbors:
@@ -64,7 +65,6 @@ class Node:
                 if len(self.neighbors) < self.number_of_neighbors:
                     for i in self.nodes_to_be_connected:
                         self._send_to_address(i[0])
-            
 
             if (len(self.neighbors) < self.number_of_neighbors):
                 # print(self.id, 'going new neighbors')
@@ -89,7 +89,6 @@ class Node:
             except Exception as e:
                 pass
 
-    
     def _get_new_neighbors(self):
         nds = [nd[0] for nd in self.nodes_to_be_connected]
         remaining = self.number_of_neighbors - len(self.neighbors)
@@ -105,7 +104,7 @@ class Node:
                     while address in self.neighbors:
                         node = choice(self.network_nodes)
                         address = node.address
-                
+
             self.nodes_to_be_connected.append((address, time.time()))
 
     def _process_received_packet(self, packet):
@@ -120,7 +119,7 @@ class Node:
                 self.neighbor_start_time[packet.sender_address] = time.time()
             else:
                 self.to_be_neighbors.append(packet.sender_address)
-    
+
         # if len(self.neighbors) < self.number_of_neighbors:
         #     for address in old_to_be_neighbors:
         #         if address in received_packets.keys():
@@ -135,7 +134,7 @@ class Node:
         return {
             address: {
                 'sent_packets_count': self.sent_packets[address],
-                 'received_packets_count': self.received_packets[address]
+                'received_packets_count': self.received_packets[address]
             } for address in self.have_been_neighbors
         }
 
@@ -175,6 +174,31 @@ class Node:
 
     def stop(self):
         self.is_stopped = True
+
+    def get_current_topology(self):
+        bidirectionals, unidirectionals = defaultdict(list), defaultdict(list)
+
+        for address in self.last_received_packets:
+            last_packet = self.last_received_packets.get(address)
+            last_packet_time = self.receive_times.get(address)
+            if time.time() - last_packet_time < 8:
+                for neighbor_address in last_packet.neighbors:
+                    if last_packet.sender_address in unidirectionals[neighbor_address]:
+                        bidirectionals[neighbor_address] = last_packet.sender_address
+                        bidirectionals[last_packet.sender_address] = neighbor_address
+                    else:
+                        unidirectionals[last_packet.sender_address] = neighbor_address
+
+        all_network_nodes = sorted(
+            [*self.network_nodes, self], key=lambda x: x.id)
+        return [
+            [
+                2 if row_node.address in bidirectionals[
+                    col_node.address] else 1 if row_node.address in unidirectionals[col_node.address] else 0
+                for col_node in all_network_nodes
+            ]
+            for row_node in all_network_nodes
+        ]
 
 
 class HelloPacket:
