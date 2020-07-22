@@ -107,7 +107,6 @@ class Node:
                         address = node.address
                 
             self.nodes_to_be_connected.append((address, time.time()))
-        # print('tooo', self.nodes_to_be_connected)
 
     def _process_received_packet(self, packet):
         self.receive_times[packet.sender_address] = time.time()
@@ -131,6 +130,14 @@ class Node:
         #     for address in received_packets:
         #         if address not in self.neighbors:
         #             self.random_strangers.append(address)
+
+    def get_neighbor_packets_count(self):
+        return {
+            address: {
+                'sent_packets_count': self.sent_packets[address],
+                 'received_packets_count': self.received_packets[address]
+            } for address in self.have_been_neighbors
+        }
 
     def _send_to_address(self, address):
         if self.is_disabled:
